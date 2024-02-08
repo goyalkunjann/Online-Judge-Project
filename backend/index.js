@@ -1,63 +1,100 @@
 const express = require("express");
 const app = express();
 const { DBConnection } = require("./database/db");
-const { config } = require("dotenv");
-require("dotenv").config();
-const PORT = process.env.PORT || config.env.PORT;
-const User = require("./model/user");
+const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const User = require("./model/userschema");
 
+// Load environment variables
+require("dotenv").config();
+
+// Middleware to parse JSON bodies of incoming requests
+app.use(express.json());
+
+// Establish database connection
 DBConnection();
+
+// Define PORT
+const PORT = process.env.PORT || 8080;
+
+// Welcome route
 app.get("/", (req, res) => {
-    res.send("Welcome");
+    res.send("Welcome to the backend server");
 });
 
-// register API
-app.post("/register", async(req, res) => {
+// Signup API
+app.post("/signup", async(req, res) => {
     try {
-        // get all data from frontend
-        const { firstname, lastname, username, password } = req.body;
+        const { firstname, lastname, username, email, password } = req.body;
 
-        // validate ALL the data should exists
-        if (!firstname && !lastname && !username && !password) {
-            return res.status(400).send("Please enter all the required details");
+        // Validate all required fields are present
+        if (!firstname || !lastname || !username || !email || !password) {
+            return res.status(400).json({ message: "Please provide all required details" });
         }
 
-        // validate if user already exists or not
-        const doesUserExists = await User.findOne({ username });
-        if (doesUserExists) {
-            return res.status(200).send(`User ${username} already exists`);
+        // Check if user already exists
+        const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+        if (existingUser) {
+            return res.status(409).json({ message: "User already exists" });
         }
-        // encrypt the password
+
+        // Hash the password
         const hashedPassword = await bcrypt.hash(password, 12);
 
-        // save data in DB
-        const userData = await User.create({
+        // Create new user
+        const newUser = new User({
             firstname,
             lastname,
             username,
-            hashedPassword
+            email,
+            password: hashedPassword
         });
 
-        // generate a JWT token for user & send
-        const token = jwt.sign({ id: userData._id, username },
-            process.env.SECRET_KEY, { expiresIn: "1h" }
-        );
+        // Save user to the database
+        await newUser.save();
 
-        userData.password = undefined;
-        res
-            .status(200)
-            .json({ message: "You have successfully reistered!", userData });
+        res.status(201).json({ message: "User registered successfully", user: newUser });
     } catch (error) {
-        console.log("Error:" + error.message);
+        console.error("Error registering user:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
 });
 
-// login API
-app.post("/login", (req, res) => {
-    res.send("Login Page");
+// Login API
+app.post("/login", async(req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        // Validate all required fields are present
+        if (!username || !password) {
+            return res.status(400).json({ message: "Please provide username and password" });
+        }
+
+        // Find user by username
+        const user = await User.findOne({ username });
+
+        // Check if user exists
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Compare passwords
+        const passwordMatch = await bcrypt.compare(password, user.password);
+        if (!passwordMatch) {
+            return res.status(401).json({ message: "Incorrect password" });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign({ userId: user._id, username: user.username }, process.env.SECRET_KEY, { expiresIn: "1h" });
+
+        res.status(200).json({ message: "Login successful", token });
+    } catch (error) {
+        console.error("Error logging in:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
 });
 
+// Start server
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
