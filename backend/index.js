@@ -5,7 +5,8 @@ const { DBConnection } = require("./database/db");
 const { config } = require("dotenv");
 require("dotenv").config();
 const PORT = process.env.PORT || config.env.PORT;
-const User = require("./model/User.js");
+const Problem = require("./model/problemscehma.js")
+const User = require("./model/userschema.js");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
@@ -33,7 +34,7 @@ app.post("/register", async(req, res) => {
             return res.status(200).send(`User ${username} already exists`);
         }
 
-    
+
         const hashedPassword = await bcrypt.hash(password, 12);
 
         const userData = await User.create({
@@ -82,16 +83,66 @@ app.post("/login", async(req, res) => {
 
         const options = {
             expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-            httpOnly: true 
+            httpOnly: true
         };
 
         res.status(200).cookie("token", token, options).json({
             message: "You have successfully logged In!",
             success: true,
-            token 
+            token
         });
     } catch (error) {
         console.log("Error:" + error.message);
+    }
+});
+
+// Problem API endpoint
+app.post("/problem", async(req, res) => {
+    try {
+        const { title, description, inputFormat, outputFormat, difficulty, tag, constraints, sampleinput, sampleoutput } = req.body;
+
+        const problem = await Problem.create({
+            title,
+            description,
+            inputFormat,
+            outputFormat,
+            difficulty,
+            tag,
+            constraints,
+            sampleinput,
+            sampleoutput
+        });
+
+        return res.status(201).json({
+            message: "Problem added successfully",
+            problem,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: "Error adding problem" });
+    }
+});
+
+app.get("/problem/:id", async(req, res) => {
+    try {
+        const id = req.params.id;
+        const problem = await Problem.findById(id);
+        if (!problem) {
+            return res.status(404).json({ message: "Problem not found" });
+        }
+        return res.status(200).json(problem);
+    } catch (error) {
+        console.log("Error retrieving problem:", error.message);
+        return res.status(500).json({ message: "Error retrieving problem" });
+    }
+});
+
+app.get("/problems", async(req, res) => {
+    try {
+        const problems = await Problem.find({});
+        return res.status(200).json(problems);
+    } catch (error) {
+        console.log("Error retrieving problems:", error.message);
+        return res.status(500).json({ message: "Error retrieving problems" });
     }
 });
 
