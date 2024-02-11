@@ -99,7 +99,11 @@ app.post("/login", async(req, res) => {
 // Problem API endpoint
 app.post("/problem", async(req, res) => {
     try {
-        const { title, description, inputFormat, outputFormat, difficulty, tag, constraints, sampleinput, sampleoutput } = req.body;
+        const { title, description, inputFormat, outputFormat, difficulty, tag, constraints, sampleinput, sampleoutput, testCases } = req.body;
+
+        if (!title || !description || !difficulty || !tag || !sampleinput || !sampleoutput || !testCases) {
+            return res.status(400).send("Please enter all the required details including test cases.");
+        }
 
         const problem = await Problem.create({
             title,
@@ -110,7 +114,8 @@ app.post("/problem", async(req, res) => {
             tag,
             constraints,
             sampleinput,
-            sampleoutput
+            sampleoutput,
+            testCases
         });
 
         return res.status(201).json({
@@ -118,6 +123,7 @@ app.post("/problem", async(req, res) => {
             problem,
         });
     } catch (error) {
+        console.log("Error adding problem:", error.message);
         return res.status(500).json({ message: "Error adding problem" });
     }
 });
