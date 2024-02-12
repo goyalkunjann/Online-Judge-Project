@@ -5,6 +5,7 @@ const { DBConnection } = require("./database/db");
 const { config } = require("dotenv");
 require("dotenv").config();
 const PORT = process.env.PORT || config.env.PORT;
+const Submission = require("./model/submissionscehma.js")
 const Problem = require("./model/problemscehma.js")
 const User = require("./model/userschema.js");
 const bcrypt = require("bcryptjs");
@@ -151,6 +152,46 @@ app.get("/problems", async(req, res) => {
         return res.status(500).json({ message: "Error retrieving problems" });
     }
 });
+
+//Submission API endpoint
+
+const addSubmission = async(req, res) => {
+    const { problemId, userId, language, code, verdict } = req.body;
+    if (!code) {
+        return res.status(422).json({ message: "Please provide code" });
+    }
+    try {
+        const submissionExist = await Submission.findOne({ problemId });
+        if (submissionExist) {
+            submissionExist.submissions.push({ userId, language, code, verdict, submittedAt: new Date() });
+            await submissionExist.save();
+            res.status(201).json({ message: "Submission added successfully" });
+        } else {
+            const newSubmission = new Submission({
+                problemId,
+                submissions: [{ userId, language, code, verdict, submittedAt: new Date() }],
+            });
+            await newSubmission.save();
+            res.status(201).json({ message: "Submission added successfully" });
+        }
+    } catch (error) {
+        res.status(500).json({ message: "Something went wrong: " + error.message });
+    }
+};
+
+const getSubmissionsByProblemId = async(req, res) => {
+    try {
+        const { id } = req.params;
+        const submissions = await Submission.findOne({ problemId: id }).populate('submissions.userId', 'username');
+        if (submissions) {
+            return res.status(200).json(submissions);
+        } else {
+            return res.status(404).json({ message: "No submissions found for this problem" });
+        }
+    } catch (error) {
+        res.status(500).json({ message: "Something went wrong: " + error.message });
+    }
+};
 
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
