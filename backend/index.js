@@ -1,26 +1,26 @@
+require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
-const app = express();
-const { DBConnection } = require("./database/db");
-const { config } = require("dotenv");
-require("dotenv").config();
-const PORT = process.env.PORT || config.env.PORT;
-const Submission = require("./model/submissionscehma.js")
-const Problem = require("./model/problemscehma.js")
-const User = require("./model/userschema.js");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 
+const app = express();
+const { DBConnection } = require("./database/db");
+
+const Submission = require("./model/submissionSchema.js");
+const Problem = require("./model/problemSchema.js");
+const User = require("./model/userSchema.js");
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 DBConnection();
-
 app.get("/", (req, res) => {
-    res.send("Welcome");
+    res.send("Welcome to the Online Judge Platform!");
 });
-
 // Register API endpoint
 app.post("/register", async(req, res) => {
     try {
@@ -192,6 +192,8 @@ const getSubmissionsByProblemId = async(req, res) => {
         res.status(500).json({ message: "Something went wrong: " + error.message });
     }
 };
+
+const PORT = process.env.PORT || 8090;
 
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
