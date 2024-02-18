@@ -9,9 +9,9 @@ const cookieParser = require("cookie-parser");
 const app = express();
 const { DBConnection } = require("./database/db");
 
-const Submission = require("./model/submissionSchema.js");
-const Problem = require("./model/problemSchema.js");
-const User = require("./model/userSchema.js");
+const Submission = require("./model/submissionSchema");
+const Problem = require("./model/problemSchema");
+const User = require("./model/userSchema");
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
