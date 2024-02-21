@@ -1,14 +1,12 @@
 const mongoose = require("mongoose");
-require("dotenv").config();
+require("dotenv").config(); // This ensures environment variables are loaded
 
 const DBConnection = async() => {
-    const MONGO_URL = process.env.MONGO_URL;
-    console.log(MONGO_URL);
     try {
-        await mongoose.connect(MONGO_URL);
+        await mongoose.connect(process.env.MONGO_URL);
         console.log("Connected to database");
     } catch (error) {
-        console.log("Error connecting to database ", error.message);
+        console.error("Error connecting to database:", error.message);
     }
 };
 

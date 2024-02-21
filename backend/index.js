@@ -1,199 +1,110 @@
-require("dotenv").config();
-
 const express = require("express");
-const mongoose = require("mongoose");
+const app = express();
+const { DBConnection } = require("./database/db");
+require("dotenv").config();
+const PORT = process.env.PORT || 8090;
+const User = require("./model/user");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
+const cors = require('cors');
 
-const app = express();
-const { DBConnection } = require("./database/db");
-
-const Submission = require("./model/submissionSchema");
-const Problem = require("./model/problemSchema");
-const User = require("./model/userSchema");
-
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// Establish database connection
 DBConnection();
+
 app.get("/", (req, res) => {
-    res.send("Welcome to the Online Judge Platform!");
+    res.send("Welcome to the Online Judge Project Backend");
 });
-// Register API endpoint
+
+// Registration API
 app.post("/register", async(req, res) => {
-    try {
-        const { firstname, lastname, username, email, password } = req.body;
+    const { firstname, lastname, email, password } = req.body;
 
-        if (!firstname || !lastname || !username || !email || !password) {
-            return res.status(400).send("Please enter all the required details");
-        }
-
-        const doesUserExist = await User.findOne({ username });
-        if (doesUserExist) {
-            return res.status(200).send(`User ${username} already exists`);
-        }
-
-
-        const hashedPassword = await bcrypt.hash(password, 12);
-
-        const userData = await User.create({
-            firstname,
-            lastname,
-            username,
-            email,
-            password: hashedPassword
-        });
-
-        const token = jwt.sign({ id: userData._id, username },
-            process.env.SECRET_KEY, { expiresIn: "1h" }
-        );
-
-        userData.password = undefined;
-
-        res.status(200).json({ message: "You have successfully registered!", userData });
-    } catch (error) {
-        console.log("Error:" + error.message);
+    // Check for missing fields
+    if (!firstname || !lastname || !email || !password) {
+        return res.status(400).json({ message: "Please provide all required fields." });
     }
+
+    // Check if the user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+        return res.status(409).json({ message: "User already exists." });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create the user
+    const newUser = await User.create({
+        firstname,
+        lastname,
+        email,
+        password: hashedPassword,
+    });
+
+    // Generate a token
+    const token = jwt.sign({ userId: newUser._id, email: newUser.email },
+        process.env.SECRET_KEY, { expiresIn: "1h" }
+    );
+
+    // Respond with the new user (excluding the password) and token
+    res.status(201).json({
+        message: "User registered successfully",
+        user: {
+            id: newUser._id,
+            firstname: newUser.firstname,
+            lastname: newUser.lastname,
+            email: newUser.email,
+        },
+        token,
+    });
 });
 
-// Login API endpoint
+// Login API
 app.post("/login", async(req, res) => {
-    try {
-        const { username, password } = req.body;
+    const { email, password } = req.body;
 
-        if (!username || !password) {
-            return res.status(400).send("Please enter all the required details");
-        }
-        const user = await User.findOne({ username });
-        if (!user) {
-            return res.status(200).send(`User ${username} does not exist. Please register.`);
-        }
+    // Check for missing fields
+    if (!email || !password) {
+        return res.status(400).json({ message: "Please provide both email and password." });
+    }
 
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            return res.status(400).send("Incorrect Password.");
-        }
+    // Check if the user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+        return res.status(404).json({ message: "User not found." });
+    }
 
-        const token = jwt.sign({ id: user._id, username }, process.env.SECRET_KEY, {
-            expiresIn: "1h"
+    // Verify the password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+        return res.status(401).json({ message: "Invalid credentials." });
+    }
+
+    // Generate a token
+    const token = jwt.sign({ userId: user._id, email: user.email },
+        process.env.SECRET_KEY, { expiresIn: "1h" }
+    );
+
+    // Respond with the user (excluding the password) and token
+    res.cookie("token", token, { httpOnly: true, expires: new Date(Date.now() + 3600000) }) // 1 hour
+        .status(200)
+        .json({
+            message: "Logged in successfully",
+            user: {
+                id: user._id,
+                firstname: user.firstname,
+                lastname: user.lastname,
+                email: user.email,
+            },
+            token,
         });
-
-        user.password = undefined;
-
-        const options = {
-            expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-            httpOnly: true
-        };
-
-        res.status(200).cookie("token", token, options).json({
-            message: "You have successfully logged In!",
-            success: true,
-            token
-        });
-    } catch (error) {
-        console.log("Error:" + error.message);
-    }
 });
-
-// Problem API endpoint
-app.post("/problem", async(req, res) => {
-    try {
-        const { title, description, inputFormat, outputFormat, difficulty, tag, constraints, sampleinput, sampleoutput, testCases } = req.body;
-
-        if (!title || !description || !difficulty || !tag || !sampleinput || !sampleoutput || !testCases) {
-            return res.status(400).send("Please enter all the required details including test cases.");
-        }
-
-        const problem = await Problem.create({
-            title,
-            description,
-            inputFormat,
-            outputFormat,
-            difficulty,
-            tag,
-            constraints,
-            sampleinput,
-            sampleoutput,
-            testCases
-        });
-
-        return res.status(201).json({
-            message: "Problem added successfully",
-            problem,
-        });
-    } catch (error) {
-        console.log("Error adding problem:", error.message);
-        return res.status(500).json({ message: "Error adding problem" });
-    }
-});
-
-app.get("/problem/:id", async(req, res) => {
-    try {
-        const id = req.params.id;
-        const problem = await Problem.findById(id);
-        if (!problem) {
-            return res.status(404).json({ message: "Problem not found" });
-        }
-        return res.status(200).json(problem);
-    } catch (error) {
-        console.log("Error retrieving problem:", error.message);
-        return res.status(500).json({ message: "Error retrieving problem" });
-    }
-});
-
-app.get("/problems", async(req, res) => {
-    try {
-        const problems = await Problem.find({});
-        return res.status(200).json(problems);
-    } catch (error) {
-        console.log("Error retrieving problems:", error.message);
-        return res.status(500).json({ message: "Error retrieving problems" });
-    }
-});
-
-//Submission API endpoint
-
-const addSubmission = async(req, res) => {
-    const { problemId, userId, language, code, verdict } = req.body;
-    if (!code) {
-        return res.status(422).json({ message: "Please provide code" });
-    }
-    try {
-        const submissionExist = await Submission.findOne({ problemId });
-        if (submissionExist) {
-            submissionExist.submissions.push({ userId, language, code, verdict, submittedAt: new Date() });
-            await submissionExist.save();
-            res.status(201).json({ message: "Submission added successfully" });
-        } else {
-            const newSubmission = new Submission({
-                problemId,
-                submissions: [{ userId, language, code, verdict, submittedAt: new Date() }],
-            });
-            await newSubmission.save();
-            res.status(201).json({ message: "Submission added successfully" });
-        }
-    } catch (error) {
-        res.status(500).json({ message: "Something went wrong: " + error.message });
-    }
-};
-
-const getSubmissionsByProblemId = async(req, res) => {
-    try {
-        const { id } = req.params;
-        const submissions = await Submission.findOne({ problemId: id }).populate('submissions.userId', 'username');
-        if (submissions) {
-            return res.status(200).json(submissions);
-        } else {
-            return res.status(404).json({ message: "No submissions found for this problem" });
-        }
-    } catch (error) {
-        res.status(500).json({ message: "Something went wrong: " + error.message });
-    }
-};
-
-const PORT = process.env.PORT || 8090;
 
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
